@@ -4,6 +4,8 @@ Clone contracts of Uniswap to understand how DEX works
 
 <br />
 
+## 1. Install
+
 ### Install Solidity compiler
 
 ```zsh
@@ -26,6 +28,17 @@ yarn install
 ```
 
 <br />
+
+## 2. Setup environment variables
+
+Copy and paste your private key into `.env` file. Don't forget prefix it with `0x`!
+
+```.env
+PRIVATE_KEY=0xabc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1
+```
+
+<br />
+
 
 ---
 
