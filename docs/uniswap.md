@@ -18,9 +18,11 @@ AMM을 구성하는 주요 요소는 가격 결정 알고리즘, 유동성 공�
 
 ## 2. CPMM
 
-Uniswap은 AMM 모델 중에서도 CPMM(Constant Product Market Maker)을 사용하는데요, 이 CPMM을 통해 스왑되는 토큰의 가격이 결정됩니다. CPMM에서는 두 토큰의 수량의 곱은 항상 일정합니다. 수식으로 표현하면 다음과 같고요.
+Uniswap은 AMM 모델 중에서도 CPMM(Constant Product Market Maker)을 사용하는데요, 이 CPMM을 통해 스왑되는 토큰의 가격이 결정됩니다. CPMM 모델은 간단합니다. 두 토큰의 수량의 곱은 항상 일정하다는 건데요, 수식으로 표현하면 이렇습니다: _X * Y = K_
 
-_X * Y = K_
+<br />
+
+<img src="./img/cpmm.png" width="800" />
 
 <br />
 
