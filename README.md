@@ -4,7 +4,13 @@ Clone contracts of Uniswap to understand how DEX works
 
 <br />
 
-## 1. Install
+## 1. What I Learned
+
+- [Uniswap 이해하기](./docs/uniswap.md)
+
+<br />
+
+## 2. Install
 
 ### Install Solidity compiler
 
@@ -29,9 +35,9 @@ yarn install
 
 <br />
 
-## 2. Setup environment variables
+## 3. Setup environment variables
 
-Copy and paste your private key into `.env` file. Don't forget prefix it with `0x`!
+Copy and paste your private key for Ethereum address into `.env` file. Don't forget prefix it with `0x`!
 
 ```.env
 PRIVATE_KEY=0xabc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1
