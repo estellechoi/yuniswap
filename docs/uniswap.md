@@ -39,7 +39,7 @@ AMM을 구성하는 주요 요소는 가격 결정 알고리즘, 유동성 공�
 
 <br />
 
-상수 K는 어떤 스왑이 일어나도 변하지 않는 고정값이며, 이 값은 유동성이 추가되거나 제거될 때에만 변합니다. 토큰의 가격은 상수 𝒌를 유지하는 𝒙 / 𝒚 비율에 의해 결정됩니다.
+상수 𝒌는 어떤 스왑이 일어나도 변하지 않는 고정값이며, 이 값은 유동성이 추가되거나 제거될 때에만 변합니다. 토큰의 가격은 상수 𝒌를 유지하는 𝒙 / 𝒚 비율에 의해 결정됩니다.
 
 > This is done by maintaining the relationship eth_pool * token_pool = invariant. This invariant is held constant during trades and only changes when liquidity is added or removed from the market. - [Uniswap Whitepaper](https://hackmd.io/@HaydenAdams/HJ9jLsfTz?type=view#ETH-%E2%87%84-ERC20-Trades)
 
