@@ -6,7 +6,7 @@ Clone contracts of Uniswap to understand how DEX works
 
 ## 1. What I Learned
 
-- [Uniswap 이해하기](./docs/uniswap.md)
+- [Uniswap V1 - V2 이해하기](./docs/uniswap.md)
 
 <br />
 
