@@ -59,7 +59,7 @@ CPMM 모델을 그래프로 그리면 아래와 같이 [Hyperbola](https://en.wi
 
 <br />
 
-[Uniswap Whitepaper](https://hackmd.io/@HaydenAdams/HJ9jLsfTz?type=view)에서 사용한 [Formalized CPMM](https://github.com/runtimeverification/verified-smart-contracts/blob/uniswap/uniswap/x-y-k.pdf) 문서를 통해 조금 더 정리해보겠습니다.
+[Uniswap Whitepaper](https://hackmd.io/@HaydenAdams/HJ9jLsfTz?type=view)에서 사용한 [Formalized CPMM](https://github.com/runtimeverification/verified-smart-contracts/blob/uniswap/uniswap/x-y-k.pdf) 문서를 통해 조금 더 정리해보겠습니다. (WIP)
 
 <br />
 
@@ -71,7 +71,25 @@ CPMM 모델을 그래프로 그리면 아래와 같이 [Hyperbola](https://en.wi
 
 ## 3. Slippage
 
-CPMM의 단점은, 처음에 의도했던 가격과 실제 거래 가격 사이에 유의미한 차이가 발생하는 슬리피지(Slippage) 현상입니다. 슬리피지 현상은 값을 직접 대입해보면 더 빨리 와닿는데, 예를 들어 Uniswap의 ETH/INCH 풀에 10 ETH와 500 INCH가 공급되어 있다고 가정해보겠습니다. 그럼 K는 10 * 500 = 5000 이고요, 이 유동성 풀에 1 ETH를 넣고 INCH 토큰을 빼려고할 때 얼만큼의 INCH를 받을 수 있을까요? 수수료는 없다고 가정합니다. 이제 풀에 11 ETH가 존재하므로, 스왑 후 풀에 남은 INCH의 수량은 (5000 / 11) 이어야 합니다. 따라서, 사용자에게 빼주어야하는 INCH의 양은 (스왑 전 수량 - 스왑 후 수량) 이므로, 500 - (5000 / 11) ≒ 45.5 INCH 입니다. 자, 슬리피지가 발생했습니다. 스왑 전에는 분명 1 ETH와 50 INCH 스왑이 가능해보였지만, 막상 스왑을 하고나니 처음 의도했던 것보다 적은 INCH 토큰을 받았기 때문입니다.
+CPMM의 단점은, 처음에 의도했던 가격과 실제 거래 가격 사이에 유의미한 차이가 발생하는 슬리피지(Slippage) 현상입니다. 슬리피지 현상은 값을 직접 대입해보면 더 빨리 와닿기 때문에, 다음과 같이 예를 들어 슬리피지를 확인하는 과정을 나열해보았습니다.
+
+1. Uniswap의 ETH/INCH 풀에 10 ETH와 500 INCH가 공급되어 있다.
+
+2. 그럼 K는 10 * 500 = 5000
+
+3. 이 유동성 풀에 1 ETH를 넣고 INCH 토큰을 빼려고할 때 몇 개의 INCH를 받을 수 있을까? 수수료는 없다고 가정하고.
+
+4. 1 ETH를 넣으면 풀에 존재하는 ETH의 수량은 11 ETH가 된다.
+
+5. 스왑 후 풀에 남는 INCH의 수량은 (5000 / 11) 이어야 한다. 𝒙 × 𝒚 = 𝒌
+
+6. 따라서, 풀에서 빼야 하는 INCH의 양은 500 - (5000 / 11) ≒ 45.5 INCH: 스왑 전 수량 - 스왑 후 수량
+
+7. 자, 슬리피지가 발생했다.
+
+8. 스왑 전에는 분명 1 ETH와 50 INCH 스왑이 가능해보였지만..
+
+9. 막상 스왑을 하고나니 처음 의도했던 것보다 적은 INCH 토큰을 받았다. 이것이 슬리피지이다.
 
 <br />
 
