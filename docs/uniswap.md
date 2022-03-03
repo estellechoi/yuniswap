@@ -103,7 +103,188 @@ Uniswap V3부터는 Concentrated Liquidity, 집중화된 유동성을 도입하�
 
 ## 4. Swap
 
-Uniswap V2의 스왑 함수는 [UniswapV2Pair](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol) Contract에서 확인할 수 있는데, 코드에 대한 분석을 주석으로 정리했습니다. 일부 주석은 실제 Contract에 원래 포함되어있는 것이기 때문에, 실제 Contract와 함께 확인하시는 것이 좋고요, 저의 주석은 `★` 표시로 구분했습니다. `★★★`로 표시한 부분은 코드 블록 아래에 별도로 정리했습니다.
+Uniswap V2의 스왑 로직은 [`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol) Contract에서 확인할 수 있는데, 해당 Contract의 `swap()` 메소드를 보시면 됩니다. 이 `swap()` 메소드는 외부에서 직접 호출되지 않고 [Periphery Contract](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/#UniswapV2Router02)를 통해 호출되도록 설계되어 있는데, [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 해당 Periphery Contract입니다. 그러니까 외부에서 Uniswap의 `swap()` 메소드를 호출하려면 `UniswapV2Router02` 컨트랙트를 통해야만 합니다. 이렇게 외부와의 Connector 역할을 하는 Contract를 Router라고 부르고요.
+
+코드에 대한 분석은 주석으로 정리했습니다. 일부 주석은 실제 Contract에 원래 포함되어있는 것이기 때문에, 실제 Contract와 함께 확인하시는 것이 좋고요, 저의 주석은 `★` 표시로 구분했습니다. `★★★`로 표시한 부분은 코드 블록 아래에 별도로 정리했습니다.
+
+<br />
+
+### `UniswapV2Router02`
+
+이 Periphery Contract에서는 `_swap()`이라는 `internal` 메소드를 통해 `UniswapV2Pair`의 `swap()` 메소드를 호출할 수 있습니다. Contract를 살펴보면 `_swap()` 메소드는 몇 가지 `external` 함수들에서 호출되는데 아래의 코드 분석에서는 그 중 한 가지 메소드인 `swapExactTokensForTokens()` 메소드만 다루었습니다.
+
+```solidity
+pragma solidity =0.6.6;
+
+import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol';
+import '@uniswap/lib/contracts/libraries/TransferHelper.sol';
+
+import './interfaces/IUniswapV2Router02.sol';
+import './libraries/UniswapV2Library.sol';
+import './libraries/SafeMath.sol';
+import './interfaces/IERC20.sol';
+import './interfaces/IWETH.sol';
+
+contract UniswapV2Router02 is IUniswapV2Router02 {
+    // ★ 유효 범위를 넘치면 숫자가 Reset되는 것을 막기 위해 SafeMath 라이브러리 사용
+    using SafeMath for uint;
+
+    address public immutable override factory;
+    address public immutable override WETH;
+
+    // ★ Deadline이 남았는지 검사하는 modifier
+    modifier ensure(uint deadline) {
+        require(deadline >= block.timestamp, 'UniswapV2Router: EXPIRED');
+        _;
+    }
+
+    constructor(address _factory, address _WETH) public {
+        factory = _factory;
+        WETH = _WETH;
+    }
+
+    // ABBR .....
+
+    // **** SWAP ****
+    // requires the initial amount to have already been sent to the first pair
+    function _swap(uint[] memory amounts, address[] memory path, address _to) internal virtual {
+        for (uint i; i < path.length - 1; i++) {
+            // ★ 스왑하는 두 토큰 주소
+            (address input, address output) = (path[i], path[i + 1]);
+            (address token0,) = UniswapV2Library.sortTokens(input, output);
+            // ★ 풀에서 꺼내야하는 토큰 금액 △𝒚
+            uint amountOut = amounts[i + 1];
+            // ★ In 토큰의 amountOut은 0, Out 토큰의 amountOut은 △𝒚 으로 세팅
+            (uint amount0Out, uint amount1Out) = input == token0 ? (uint(0), amountOut) : (amountOut, uint(0));
+            // ★ 스왑 토큰의 수가 3 이상이면, Out 토큰과 제3 토큰의 Uniswap 토큰페어 주소를 가져오고
+            // ★ 그게 아니라면, 인자로 받은 _to를 할당
+            address to = i < path.length - 2 ? UniswapV2Library.pairFor(factory, output, path[i + 2]) : _to;
+            // ★★★ 3) swap
+            IUniswapV2Pair(UniswapV2Library.pairFor(factory, input, output)).swap(
+                amount0Out, amount1Out, to, new bytes(0)
+            );
+        }
+    }
+
+    // ★ In 토큰의 수량을 명시하고, 그에 맞는 양만큼 페어 토큰을 Out 하고자 할 때
+    function swapExactTokensForTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external virtual override ensure(deadline) returns (uint[] memory amounts) {
+        // ★★★ 1) amounts[0] → amonutIn, amounts[1] → amountOut
+        amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);
+        // ★ Slippage Tolerance를 넘지 않는지 확인!
+        require(amounts[amounts.length - 1] >= amountOutMin, 'UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT');
+        // ★★★ 2) In 토큰을 사용자의 주소에서 Uniswap의 토큰페어 주소로 전송시킨다
+        TransferHelper.safeTransferFrom(
+            path[0], msg.sender, UniswapV2Library.pairFor(factory, path[0], path[1]), amounts[0]
+        );
+        // ★ 이제 스왑하자
+        _swap(amounts, path, to);
+    }
+
+    // ABBR .....
+}
+```
+
+<br />
+
+#### `★★★ 1)`
+
+```solidity
+        // ★★★ 1) amounts[0] → amonutIn, amounts[1] → amountOut
+        amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);
+```
+
+<br />
+
+`getAmountsOut()`은 풀에서 꺼내야하는 토큰의 수량을 계산하여 반환하는 메소드인데, 여기에서 가격 결정 알고리즘 CPMM을 사용하여 꺼내야하는 토큰의 수량 `△𝒚`를 구하는 로직을 확인할 수 있습니다. 다음과 같이 도출되는 `△𝒚 = (△𝒙 × 𝒚) / (𝒙 + △𝒙)` 방정식이 사용됩니다. [`UniswapV2Library`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol) 라이브러리에서 이 메소드를 찾을 수 있습니다.
+
+```
+(𝒙 + △𝒙) × (𝒚 - △𝒚) = 𝒙 × 𝒚 = 𝒌
+(𝒙 + △𝒙) × (𝒚 - △𝒚) = 𝒙𝒚
+𝒚 - △𝒚 = 𝒙𝒚 / (𝒙 + △𝒙)
+△𝒚 = 𝒚 - (𝒙𝒚 / (𝒙 + △𝒙))
+△𝒚 = (𝒚(𝒙 + △𝒙) - 𝒙𝒚) / (𝒙 + △𝒙)
+△𝒚 = (𝒙𝒚 + (△𝒙 × 𝒚) - 𝒙𝒚) / (𝒙 + △𝒙)
+
+∴ △𝒚 = (△𝒙 × 𝒚) / (𝒙 + △𝒙)
+```
+
+<br />
+
+```solidity
+    // given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
+    function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) internal pure returns (uint amountOut) {
+        // ★ In 토큰의 수량이 0보다 큰지, 토큰 페어의 유동성이 고갈되지 않았는지 검사
+        require(amountIn > 0, 'UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT');
+        require(reserveIn > 0 && reserveOut > 0, 'UniswapV2Library: INSUFFICIENT_LIQUIDITY');
+        // ★ 수수료 0.3%을 제하고 유동성 풀에 들어오는 △𝒙 × 1000 
+        // ★ → 수수료는 유동성 풀에 남지 않으므로 이를 제한 △𝒙를 사용하여 △𝒚를 계산!
+        // ★ → Solidity에서 int round를 피하기 위해 1000을 곱하여 정수로 만들어 계산함!
+        uint amountInWithFee = amountIn.mul(997);
+        // ★ △𝒙 × 𝒚 × 1000
+        uint numerator = amountInWithFee.mul(reserveOut);
+        // ★ (𝒙 + △𝒙) × 1000
+        uint denominator = reserveIn.mul(1000).add(amountInWithFee);
+        // ★ △𝒚 = (△𝒙 × 𝒚) / (𝒙 + △𝒙)
+        amountOut = numerator / denominator;
+    }
+
+    // ABBR .....
+
+    // performs chained getAmountOut calculations on any number of pairs
+    function getAmountsOut(address factory, uint amountIn, address[] memory path) internal view returns (uint[] memory amounts) {
+        // ★ In/Out 최소 2 가지 토큰 주소를 받았는지 확인
+        require(path.length >= 2, 'UniswapV2Library: INVALID_PATH');
+        // ★ 첫 번째 path에 대응하는 amount에는 In 토큰의 수량을 대입
+        amounts = new uint[](path.length);
+        amounts[0] = amountIn;
+        for (uint i; i < path.length - 1; i++) {
+            // ★ In/Out 토큰의 유동성 풀 Reserve를 각각 가져온 후
+            (uint reserveIn, uint reserveOut) = getReserves(factory, path[i], path[i + 1]);
+            // ★ Out 토큰의 수량을 저장
+            amounts[i + 1] = getAmountOut(amounts[i], reserveIn, reserveOut);
+        }
+    }
+```
+
+<br />
+
+#### `★★★ 2)`
+
+```solidity
+        TransferHelper.safeTransferFrom(
+            path[0], msg.sender, UniswapV2Library.pairFor(factory, path[0], path[1]), amounts[0]
+        );
+```
+
+<br />
+
+[`TransferHelper`](https://github.com/Uniswap/solidity-lib/blob/master/contracts/libraries/TransferHelper.sol) 라이브러리를 확인해보면 `safeTransferFrom(address token, address from, address to, uint256 value)`의 두 번째 인자는 해당 ERC20 토큰을 받는 주소임을 알 수 있습니다. 두 번째 인자로 넘겨진 `UniswapV2Library.pairFor(factory, path[0], path[1])`은 [`UniswapV2Library`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol) 라이브러리에서 찾아볼 수 있는데, 스왑하는 두 토큰의 Uniswap 토큰 페어 주소를 반환합니다. 결국 두 토큰의 스왑을 위해 사용자에게 받은 In 토큰을 토큰 페어 주소에서 받은 후 미리 홀드하고 있음을 알 수 있습니다. 이 시점에 해당 토큰 페어 주소의 Balance는 `𝒙 + △𝒙` 이고, 여기에서 `△𝒙`는 아직 수수료를 제하지 않은 금액입니다.
+
+<br />
+
+#### `★★★ 3)`
+
+```solidity
+        IUniswapV2Pair(UniswapV2Library.pairFor(factory, input, output)).swap(
+            amount0Out, amount1Out, to, new bytes(0)
+        );
+```
+
+<br />
+
+[`IUniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/interfaces/IUniswapV2Pair.sol) 인터페이스를 사용하여 토큰 페어 주소로 `UniswapV2Pair` 인스턴스를 만듭니다. 이 토큰 페어 주소는 바로 위 `★★★ 2)` 주석에서 설명한 주소와 같은 주소입니다. `𝒙 + △𝒙`만큼의 잔고를 보유하고 있습니다. 세 번째 인자로는 Dummy 데이터인 `new bytes(0)`를 넣습니다. 해당 메소드의 세 번째 인자는 [Flash Swap](https://uniswap.org/blog/uniswap-v2#flash-swaps)의 경우에 유효한 데이터를 넣어주기 위한 용도인데, 여기서는 일반 Swap에 집중하기 위해 넘어가겠습니다.
+
+<br />
+
+### `UniswapV2Pair`
+
+드디어 [`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol) Contract를 봅니다.
 
 ```solidity
 pragma solidity =0.5.16;
@@ -161,6 +342,28 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         token1 = _token1;
     }
 
+    // update reserves and, on the first call per block, price accumulators
+    function _update(uint balance0, uint balance1, uint112 _reserve0, uint112 _reserve1) private {
+        // ★ Overflow 체크
+        require(balance0 <= uint112(-1) && balance1 <= uint112(-1), 'UniswapV2: OVERFLOW');
+        // ★ 현재 Timestamp
+        uint32 blockTimestamp = uint32(block.timestamp % 2**32);
+        // ★ 이 토큰 페어에 대한 마지막 블록 생성 후 경과된 시간
+        uint32 timeElapsed = blockTimestamp - blockTimestampLast; // overflow is desired
+        // ★ 가격에 경과된 시간 만큼을 곱하여 priceCumulativeLast를 각 토큰에 대해 구함 → Price Oracle 기능에 사용하기 위함
+        if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {
+            // * never overflows, and + overflow is desired
+            price0CumulativeLast += uint(UQ112x112.encode(_reserve1).uqdiv(_reserve0)) * timeElapsed;
+            price1CumulativeLast += uint(UQ112x112.encode(_reserve0).uqdiv(_reserve1)) * timeElapsed;
+        }
+        // ★ 유동성 Reserve를 𝒙 + △𝒙, 𝒚 - △𝒚로 업데이트
+        reserve0 = uint112(balance0);
+        reserve1 = uint112(balance1);
+        // ★ 마지막 블록 생성 시간 업데이트
+        blockTimestampLast = blockTimestamp;
+        emit Sync(reserve0, reserve1);
+    }
+    
     // ABBR .....
 
     // this low-level function should be called from a contract which performs important safety checks
@@ -179,35 +382,41 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         // ★ 스왑 사용자의 주소가 유효한지 검사
         require(to != _token0 && to != _token1, 'UniswapV2: INVALID_TO');
 
-        // ★ Out 수량이 양수인 토큰을 사용자 주소로 해당 금액만큼 전송
+        // ★ Out 수량이 0이 아닌 토큰을 사용자 주소로 △𝒚 만큼 전송
         if (amount0Out > 0) _safeTransfer(_token0, to, amount0Out); // optimistically transfer tokens
         if (amount1Out > 0) _safeTransfer(_token1, to, amount1Out); // optimistically transfer tokens
 
-        // ★★★ 1) data의 길이가 있다면 ... (Flash Swap의 경우에만 data의 길이가 존재, 그렇지 않으면 길이가 0인 빈 데이터)
+        // ★ Flash Swap의 경우에만 data의 길이가 존재
         if (data.length > 0) IUniswapV2Callee(to).uniswapV2Call(msg.sender, amount0Out, amount1Out, data);
 
-        // ★★★ 2) The periphery contract sends us the tokens before calling us for the swap.
+        // ★★★ 1) 미리 전송받은 In 토큰 Balance를 가져옴
         balance0 = IERC20(_token0).balanceOf(address(this));
         balance1 = IERC20(_token1).balanceOf(address(this));
         }
 
-        // ★ Out 토큰 금액
+        // ★★★ 2)
+        // ★ In 토큰이면 balance == 𝒙 + △𝒙 (수수료 미제), _reserve == 𝒙, amountOut == 0 → amountIn = △𝒙
+        // ★ Out 토큰이면 balance == 𝒚 - △𝒚, _reserve == 𝒚, amountOut == △𝒚 → amountIn = 0
         uint amount0In = balance0 > _reserve0 - amount0Out ? balance0 - (_reserve0 - amount0Out) : 0;
         uint amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amount1Out) : 0;
 
-        // ★ ?
+        // ★ 토큰 페어 주소의 Balance에 △𝒙가 포함되어있지 않으면, amount0In, amount1In 모두 0이므로 이를 더블체크!
         require(amount0In > 0 || amount1In > 0, 'UniswapV2: INSUFFICIENT_INPUT_AMOUNT');
         { // scope for reserve{0,1}Adjusted, avoids stack too deep errors
 
-        // ★ 수수료 0.3%가 차감되는 경우 Balance (수수료 낼 수 있는지 미리 체크!)
+        // ★★★ 3)
+        // ★ 수수료를 낼 수 있는지 먼저 체크한다
+        // ★ balanceAdjusted = 수수료 0.3%를 제하고 유동성 풀에 남아야하는 𝒙의 금액 × 1000
+        // ★ ((𝒙 + △𝒙) × 1000) - (△𝒙 × 3) ⇒ (𝒙 × 1000) + (△𝒙 × 997)
         uint balance0Adjusted = balance0.mul(1000).sub(amount0In.mul(3));
         uint balance1Adjusted = balance1.mul(1000).sub(amount1In.mul(3));
 
-        // ★ x * y = k
+        // ★ 𝒌가 건재한지 확인
+        // ★ ((𝒙 + △𝒙 × 0.997) × 1000) × ((𝒚 - △𝒚) × 1000) >= _reserve0 × _reserve1 × 1000 × 1000 = 𝒌
         require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(1000**2), 'UniswapV2: K');
         }
 
-        // ★ Balance, Reserve 업데이트
+        // ★ 유동성 풀의 Reserve를 업데이트!
         _update(balance0, balance1, _reserve0, _reserve1);
 
         // ★ Swap 이벤트 전송
@@ -218,26 +427,49 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
 
 <br />
 
-### ★★★ 1)
+#### `★★★ 1)`
 
 ```solidity
-if (data.length > 0) IUniswapV2Callee(to).uniswapV2Call(msg.sender, amount0Out, amount1Out, data);
+        balance0 = IERC20(_token0).balanceOf(address(this));
+        balance1 = IERC20(_token1).balanceOf(address(this));
 ```
-
-> This transfer is optimistic, because we transfer before we are sure all the conditions are met. This is OK in Ethereum because if the conditions aren't met later in the call we revert out of it and any changes it created. - [UNISWAP-V2 CONTRACT WALK-THROUGH | Ethereum](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/)
 
 <br />
 
-### ★★★ 2)
-
-```solidity
-uint amount0In = balance0 > _reserve0 - amount0Out ? balance0 - (_reserve0 - amount0Out) : 0;
-uint amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amount1Out) : 0;
-```
-
-여기에서 말하는 [Periphery contract](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/#UniswapV2Router02)는 [UniswapV2Router02](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)을 말합니다.
+여기에서 Balance를 가져올 때 사용하는 주소 `address(this)`는 `UniswapV2Pair` 인스턴스를 만들 때 사용했던 주소입니다. 사용자에게 미리 전송받은 In 토큰의 Balance를 보유하고 있는 임시 주소임을 기억하세요. Out 토큰의 Balance는 당연히 0입니다. 이게 바로 외부에서 바로 호출되지 않고 Periphery Contract를 통했는지 체크하는 Uniswap의 장치입니다. 이러한 장치없이 Core Contract인 `UniswapV2Pair`에서 토큰을 주고받는 모든 일을 처리한다면 Cheat 위험이 있기 때문입니다. 여기에서 말하는 Periphery contract는 [UniswapV2Router02](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)입니다.
 
 > Get the current balances. The periphery contract sends us the tokens before calling us for the swap. This makes it easy for the contract to check that it is not being cheated, a check that has to happen in the core contract (because we can be called by other entities than our periphery contract). - [UNISWAP-V2 CONTRACT WALK-THROUGH | Ethereum](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/)
+
+<br />
+
+#### `★★★ 2)`
+
+```solidity
+        // ★ In 토큰이면 balance == 𝒙 + △𝒙 (수수료 미제), _reserve == 𝒙, amountOut == 0 → amountIn = △𝒙
+        // ★ Out 토큰이면 balance == 𝒚 - △𝒚, _reserve == 𝒚, amountOut == △𝒚 → amountIn = 0
+        uint amount0In = balance0 > _reserve0 - amount0Out ? balance0 - (_reserve0 - amount0Out) : 0;
+        uint amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amount1Out) : 0;
+```
+
+<br />
+
+위에서 Out 토큰 `△𝒚`만큼을 이미 사용자 주소로 전송했으므로, Out 토큰의 경우 `balance == 𝒚 - △𝒚`가 성립합니다. 따라서 `amountIn`은 `0`이 되겠네요.
+
+<br />
+
+#### `★★★ 3)`
+
+```solidity
+        // ★ 수수료를 낼 수 있는지 먼저 체크한다
+        // ★ balanceAdjusted = 수수료 0.3%를 제하고 유동성 풀에 남아야하는 𝒙의 금액 × 1000
+        // ★ ((𝒙 + △𝒙) × 1000) - (△𝒙 × 3) ⇒ (𝒙 × 1000) + (△𝒙 × 997)
+        uint balance0Adjusted = balance0.mul(1000).sub(amount0In.mul(3));
+        uint balance1Adjusted = balance1.mul(1000).sub(amount1In.mul(3));
+```
+
+<br />
+
+Out 토큰의 경우 다음이 성립합니다: `(𝒚 - △𝒚) × 1000 - 0`
 
 <br />
 
@@ -247,13 +479,15 @@ uint amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amo
 
 ## 6. V1 vs V2
 
-2020년 업데이트를 발표한 Uniswap V2부터 도입된 기능들은 다음과 같습니다.
+2020년 업데이트를 발표한 Uniswap V2부터 도입된 기능들은 다음과 같습니다. 전체 내용은 [공식 블로그](https://uniswap.org/blog/uniswap-v2)에서 확인할 수 있습니다.
 
-- ERC20/ERC20 토큰 페어 지원: V1에서는 반드시 ETH로 환전하는 과정을 거쳐야했으나 V2부터 토큰 직접 스왑 가능
+- [ERC20/ERC20 토큰 페어](https://uniswap.org/blog/uniswap-v2#erc20--erc20-pairs) 지원: V1에서는 반드시 ETH로 환전하는 과정을 거쳐야했으나 V2부터 토큰 직접 스왑 가능
 
 - [WETH](https://coinmarketcap.com/alexandria/article/what-is-wrapped-ethereum-weth) 사용: V1에서는 네이티브 ETH를 사용했으나, V2부터 ETH에 페깅된 ERC20 토큰인 WETH 사용
 
-- Flash Swap: 스왑하려는 토큰 잔액이 전혀 없어도, 풀에서 토큰을 빌린 뒤 하나의 Transaction 내에서 자유롭게 사용 후 바로 상환하는 기능
+- [Price Oracle](https://uniswap.org/blog/uniswap-v2#price-oracles): 직전 블록의 마지막 Transaction에 의해 결정되는 가격과, 해당 가격이 유지된 시간에 따라 비중을 달리하는 계산에 근거한 TWAP(Time-weighted Average Price) 데이터 제공
+
+- [Flash Swap](https://uniswap.org/blog/uniswap-v2#flash-swaps): 스왑하려는 토큰 잔액이 전혀 없어도, 풀에서 토큰을 빌린 뒤 하나의 Transaction 내에서 자유롭게 사용 후 바로 상환하는 기능
 
 - UNI 토큰: 거버넌스 토큰인 UNI 발행, 거래 수수료의 일부를 UNI 홀더에게 지급(프로토콜 수수료)
 
