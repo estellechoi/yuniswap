@@ -222,6 +222,17 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
 <br />
 
 ```solidity
+pragma solidity >=0.5.0;
+
+import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol';
+
+import "./SafeMath.sol";
+
+library UniswapV2Library {
+    using SafeMath for uint;
+
+    // ABBR .....
+
     // given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
     function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) internal pure returns (uint amountOut) {
         // ★ In 토큰의 수량이 0보다 큰지, 토큰 페어의 유동성이 고갈되지 않았는지 검사
@@ -258,6 +269,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
             amounts[i + 1] = getAmountOut(amounts[i], reserveIn, reserveOut);
         }
     }
+}
 ```
 
 <br />
@@ -272,7 +284,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
 
 <br />
 
-[`TransferHelper`](https://github.com/Uniswap/solidity-lib/blob/master/contracts/libraries/TransferHelper.sol) 라이브러리를 확인해보면 `safeTransferFrom(address token, address from, address to, uint256 value)`의 두 번째 인자는 해당 ERC20 토큰을 받는 주소임을 알 수 있습니다. 두 번째 인자로 넘겨진 `UniswapV2Library.pairFor(factory, path[0], path[1])`은 [`UniswapV2Library`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol) 라이브러리에서 찾아볼 수 있는데, 스왑하는 두 토큰의 Uniswap 토큰 페어 주소를 반환합니다. 결국 두 토큰의 스왑을 위해 사용자에게 받은 In 토큰을 토큰 페어 주소에서 받은 후 미리 홀드하고 있음을 알 수 있습니다. 이 시점에 해당 토큰 페어 주소의 Balance는 `𝒙 + △𝒙` 이고, 여기에서 `△𝒙`는 아직 수수료를 제하지 않은 금액입니다.
+[`TransferHelper`](https://github.com/Uniswap/solidity-lib/blob/master/contracts/libraries/TransferHelper.sol) 라이브러리를 확인해보면 `safeTransferFrom(address token, address from, address to, uint256 value)`의 두 번째 인자는 해당 ERC20 토큰을 받는 주소임을 알 수 있습니다. 두 번째 인자로 넘겨진 `UniswapV2Library.pairFor(factory, path[0], path[1])`은 [`UniswapV2Library`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol) 라이브러리에서 찾아볼 수 있는데, 스왑하는 두 토큰의 Uniswap 토큰 페어 주소를 반환합니다. 결국 두 토큰의 스왑을 위해 사용자에게 받은 In 토큰을 토큰 페어 주소에서 받은 후 미리 홀드하고 있음을 알 수 있습니다. 이 시점에 해당 토큰 페어 주소의 In 토큰 Balance는 `𝒙 + ◻︎𝒙` 이고, 여기에서 `◻︎𝒙`는 아직 수수료를 제하지 않은 금액입니다.
 
 <br />
 
@@ -286,7 +298,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
 
 <br />
 
-[`IUniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/interfaces/IUniswapV2Pair.sol) 인터페이스를 사용하여 토큰 페어 주소로 `UniswapV2Pair` 인스턴스를 만듭니다. 이 토큰 페어 주소는 바로 위 `★★★ 2)` 주석에서 설명한 주소와 같은 주소입니다. `𝒙 + △𝒙`만큼의 잔고를 보유하고 있습니다. 세 번째 인자로는 Dummy 데이터인 `new bytes(0)`를 넣습니다. 해당 메소드의 세 번째 인자는 [Flash Swap](https://uniswap.org/blog/uniswap-v2#flash-swaps)의 경우에 유효한 데이터를 넣어주기 위한 용도인데, 여기서는 일반 Swap에 집중하기 위해 넘어가겠습니다.
+[`IUniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/interfaces/IUniswapV2Pair.sol) 인터페이스를 사용하여 토큰 페어 주소로 `UniswapV2Pair` 인스턴스를 만듭니다. 이 토큰 페어 주소는 바로 위 `★★★ 2)` 주석에서 설명한 주소와 같은 주소입니다. `𝒙 + ◻︎𝒙`만큼의 잔고를 보유하고 있습니다. 세 번째 인자로는 Dummy 데이터인 `new bytes(0)`를 넣습니다. 해당 메소드의 세 번째 인자는 [Flash Swap](https://uniswap.org/blog/uniswap-v2#flash-swaps)의 경우에 유효한 데이터를 넣어주기 위한 용도인데, 여기서는 일반 Swap에 집중하기 위해 넘어가겠습니다.
 
 <br />
 
