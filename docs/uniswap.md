@@ -209,7 +209,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
 
 <br />
 
-`getAmountsOut()`은 풀에서 꺼내야하는 토큰의 수량을 계산하여 반환하는 메소드인데, 여기에서 가격 결정 알고리즘 CPMM이 사용됩니다. 꺼내야하는 토큰의 수량을 `△𝒚`라고 할 때, 다음과 같이 도출되는 `△𝒚 = (△𝒙 × 𝒚) / (𝒙 + △𝒙)` 방정식이 사용됩니다. [`UniswapV2Library`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol) 라이브러리에서 이 메소드를 찾을 수 있습니다.
+`getAmountsOut()`은 풀에서 꺼내야하는 토큰의 수량을 계산하여 반환하는 메소드인데, 여기에서 가격 결정 알고리즘 CPMM이 사용됩니다. 꺼내야하는 토큰의 수량을 `△𝒚`라고 할 때, 다음과 같이 도출되는 `△𝒚 = (△𝒙 × 𝒚) / (𝒙 + △𝒙)` 방정식이 사용됩니다.
 
 ```
 (𝒙 + △𝒙) × (𝒚 - △𝒚) = 𝒙 × 𝒚 = 𝒌
@@ -221,6 +221,8 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
 ```
 
 <br />
+
+[`UniswapV2Library`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol) 라이브러리에서 이 메소드를 찾을 수 있습니다.
 
 ```solidity
 pragma solidity >=0.5.0;
