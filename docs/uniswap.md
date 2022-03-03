@@ -145,6 +145,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
 
     // ABBR .....
 
+    // ★ swapExactTokensForTokens() 부터 보세요
     // **** SWAP ****
     // requires the initial amount to have already been sent to the first pair
     function _swap(uint[] memory amounts, address[] memory path, address _to) internal virtual {
