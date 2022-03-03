@@ -439,6 +439,7 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         uint balance0Adjusted = balance0.mul(1000).sub(amount0In.mul(3));
         uint balance1Adjusted = balance1.mul(1000).sub(amount1In.mul(3));
 
+        // ★★★ 4)
         // ★ 𝒌가 건재한지 확인
         // ★ ((𝒙 + △𝒙) × 1000) × ((𝒚 - △𝒚) × 1000) >= _reserve0 × _reserve1 × 1000 × 1000 = 𝒌
         require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(1000**2), 'UniswapV2: K');
@@ -488,7 +489,6 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
 #### `★★★ 3)`
 
 ```solidity
-        // ★ 수수료를 낼 수 있는지 먼저 체크한다
         // ★ balanceAdjusted = 수수료 0.3%를 제하고 유동성 풀에 남아야하는 𝒙 × 1000
         // ★ ((𝒙 + ◻︎𝒙) × 1000) - (◻︎𝒙 × 3) ⇒ (𝒙 × 1000) + (◻︎𝒙 × 997)
         // ★ △𝒙 = ◻︎𝒙 × 0.997
@@ -499,6 +499,22 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
 <br />
 
 Out 토큰의 경우 다음이 성립합니다: `(𝒚 - △𝒚) × 1000 - 0`
+
+<br />
+
+#### `★★★ 4)`
+
+```solidity
+        // ★ 𝒌가 건재한지 확인
+        // ★ ((𝒙 + △𝒙) × 1000) × ((𝒚 - △𝒚) × 1000) >= _reserve0 × _reserve1 × 1000 × 1000 = 𝒌
+        require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(1000**2), 'UniswapV2: K');
+```
+
+<br />
+
+수수료를 제하고도 CPMM 모델의 상수 𝒌가 건재한지 확인합니다. Uniswap에서는 스왑이 일어나는 즉시 수수료가 정산되는 것은 아니므로 유동성 풀에는 수수료를 제하지 않은 `◻︎𝒙`만큼의 Reserve가 추가되지만, 유동성 공급자들이 언제든 수수료를 청구해서 가져가더라도 𝒌 값은 일정해야 하므로 이를 체크합니다.
+
+> This is a sanity check to make sure we don't lose from the swap. There is no circumstance in which a swap should reduce reserve0*reserve1. - [UNISWAP-V2 CONTRACT WALK-THROUGH | Ethereum](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/)
 
 <br />
 
