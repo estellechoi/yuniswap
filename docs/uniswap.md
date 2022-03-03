@@ -103,7 +103,7 @@ Uniswap V3부터는 Concentrated Liquidity, 집중화된 유동성을 도입하�
 
 ## 4. Swap
 
-Uniswap V2의 스왑 로직은 [`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol) Contract에서 확인할 수 있는데, 해당 Contract의 `swap()` 메소드를 보시면 됩니다. 이 `swap()` 메소드는 외부에서 직접 호출되지 않고 [Periphery Contract](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/#UniswapV2Router02)를 통해 호출되도록 설계되어 있는데, [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 해당 Periphery Contract입니다. 그러니까 외부에서 Uniswap의 `swap()` 메소드를 호출하려면 `UniswapV2Router02` 컨트랙트를 통해야만 합니다. 이렇게 외부와의 Connector 역할을 하는 Contract를 Router라고 부르고요.
+Uniswap V2의 스왑 로직을 담은 Core Contract는 [`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol)이고, 해당 Contract의 `swap()` 메소드를 보시면 됩니다. 이 `swap()` 메소드는 `external`이지만 외부에서 직접 호출시 작동하지 않고 [Periphery Contract](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/#UniswapV2Router02)를 통해서만 호출되도록 설계되어 있다는 것이 중요합니다. [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 해당 Periphery Contract이고요. 그러니까 외부에서 Uniswap Core Contract의 `swap()` 메소드를 호출하려면 `UniswapV2Router02` 컨트랙트를 통해야만 합니다. 이렇게 외부와의 Connector 역할을 하는 Contract를 Router라고도 부릅니다.
 
 코드에 대한 분석은 주석으로 정리했습니다. 일부 주석은 실제 Contract에 원래 포함되어있는 것이기 때문에, 실제 Contract와 함께 확인하시는 것이 좋고요, 저의 주석은 `★` 표시로 구분했습니다. `★★★`로 표시한 부분은 코드 블록 아래에 별도로 정리했습니다.
 
@@ -519,6 +519,363 @@ Out 토큰의 경우 다음이 성립합니다: `(𝒚 - △𝒚) × 1000 - 0`
 <br />
 
 ## 5. Add Liquidity
+
+이번에는 유동성 추가 로직을 정리하려고 합니다. 유동성이 추가되면 CPMM 모델의 상수 `𝒌` 값이 변한다는 것을 기억하시고요. 스왑과 마찬가지로 외부에서 유동성 추가 함수를 호출하려면 Periphery Contract인 [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)를 통합니다.
+
+<br />
+
+### `addLiquidity`
+
+```solidity
+pragma solidity =0.6.6;
+
+import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol';
+import '@uniswap/lib/contracts/libraries/TransferHelper.sol';
+
+import './interfaces/IUniswapV2Router02.sol';
+import './libraries/UniswapV2Library.sol';
+import './libraries/SafeMath.sol';
+import './interfaces/IERC20.sol';
+import './interfaces/IWETH.sol';
+
+contract UniswapV2Router02 is IUniswapV2Router02 {
+
+    // ABBR .....
+
+    // ★ addLiquidity() 함수 내에서 호출됩니다
+    // **** ADD LIQUIDITY ****
+    function _addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin
+    ) internal virtual returns (uint amountA, uint amountB) {
+        // ★★★ 1) 해당 토큰 페어의 주소가 존재하지 않으면 페어를 새로 만듭니다
+        // create the pair if it doesn't exist yet
+        if (IUniswapV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
+            IUniswapV2Factory(factory).createPair(tokenA, tokenB);
+        }
+
+        // ★ 두 토큰의 Reserve 가져옴
+        (uint reserveA, uint reserveB) = UniswapV2Library.getReserves(factory, tokenA, tokenB);
+
+        // ★ 두 토큰의 Reserve가 0이면 (토큰 페어에 유동성을 처음 공급하는 거라면) 원하는 금액을 저장
+        if (reserveA == 0 && reserveB == 0) {
+            (amountA, amountB) = (amountADesired, amountBDesired);
+        } else {
+            // ★★★ 2) 
+            // ★ 이미 유동성 풀에 Reserve가 존재하므로, 기존 토큰 비율을 유지하면서 유동성을 공급하기 위해 amountBOptimal(𝑳𝒚)를 계산
+            uint amountBOptimal = UniswapV2Library.quote(amountADesired, reserveA, reserveB);
+
+            if (amountBOptimal <= amountBDesired) {
+                // ★ 최적 공급량 𝑳𝒚가 amountBMin 이상인가 → If not, revert!
+                require(amountBOptimal >= amountBMin, 'UniswapV2Router: INSUFFICIENT_B_AMOUNT');
+
+                // ★ 최종적으로 공급될 두 토큰 금액
+                (amountA, amountB) = (amountADesired, amountBOptimal);
+            } else {
+                // ★ 희망 공급량이 최적 공급량 𝑳𝒚보다 적으면 기준 토큰을 바꿔서 확인
+                // ★ 기존 토큰 비율을 유지하면서 유동성을 공급하기 위해 amountAOptimal(𝒙)를 계산 
+                uint amountAOptimal = UniswapV2Library.quote(amountBDesired, reserveB, reserveA);
+
+                // ★ 희망 공급량이 최적 공급량 𝑳𝒙 이상이어야 함 (이미 𝑳𝒚는 충족하지 못했으니까 노빠꾸)
+                assert(amountAOptimal <= amountADesired);
+
+                // ★ 최적 공급량 𝑳𝒙가 amountAMin 이상인가 → If not, revert!
+                require(amountAOptimal >= amountAMin, 'UniswapV2Router: INSUFFICIENT_A_AMOUNT');
+
+                // ★ 최종적으로 공급 가능한 두 토큰 금액 𝑳𝒙, 𝑳𝒚
+                (amountA, amountB) = (amountAOptimal, amountBDesired);
+            }
+        }
+    }
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external virtual override ensure(deadline) returns (uint amountA, uint amountB, uint liquidity) {
+        // ★ _addLiquidity 호출 → 토큰 가격을 유지하는 각 토큰의 최적 공급량을 반환함
+        (amountA, amountB) = _addLiquidity(tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin);
+
+        // ★ 토큰 페어 주소를 가져옴
+        address pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);
+
+        // ★ 두 토큰을 토큰 페어 주소로 전송
+        TransferHelper.safeTransferFrom(tokenA, msg.sender, pair, amountA);
+        TransferHelper.safeTransferFrom(tokenB, msg.sender, pair, amountB);
+
+        // ★ 해당 토큰 페어에 대한 LP토큰 발행! → 아래에서 별도의 하위 섹션으로 다룰게요
+        liquidity = IUniswapV2Pair(pair).mint(to);
+    }
+
+    // ABBR .....
+}
+```
+
+<br />
+
+#### `★★★ 1)`
+
+```solidity
+        // create the pair if it doesn't exist yet
+        if (IUniswapV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
+            IUniswapV2Factory(factory).createPair(tokenA, tokenB);
+        }
+```
+
+<br />
+
+`IUniswapV2Factory(factory).getPair(tokenA, tokenB)`는 해당 토큰 페어의 주소를 반환하고, 주소가 존재하지 않으면 새로운 페어를 만들기 위해 `createPair(tokenA, tokenB)` 메소드를 호출하여 새로운 페어를 생성합니다. [`UniswapV2Factory`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Factory.sol) Contract에서 확인할 수 있습니다.
+
+<br />
+
+#### `★★★ 2)`
+
+```solidity
+        // ★ 이미 유동성 풀에 Reserve가 존재하므로, 기존 토큰 비율을 유지하면서 유동성을 공급하기 위해 amountBOptimal(𝑳𝒚)를 계산
+        uint amountBOptimal = UniswapV2Library.quote(amountADesired, reserveA, reserveB);
+```
+
+<br />
+
+[`UniswapV2Library`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol)에서 확인해보면 토큰 A를 `𝑳𝒙`만큼 넣고자할 때 최적의 B 금액 `𝑳𝒚`는 다음과 같이 결정됩니다.
+
+```solidity
+pragma solidity >=0.5.0;
+
+import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol';
+
+import "./SafeMath.sol";
+
+library UniswapV2Library {
+
+    // ABBR .....
+
+    // given some amount of an asset and pair reserves, returns an equivalent amount of the other asset
+    function quote(uint amountA, uint reserveA, uint reserveB) internal pure returns (uint amountB) {
+        // ★ 공급하려는 𝑳𝒙가 0보다 커야함
+        require(amountA > 0, 'UniswapV2Library: INSUFFICIENT_AMOUNT');
+
+        // ★ 유동성 풀에 이미 존재하는 두 토큰의 Reserve 𝒙, 𝒚 모두 0보다 커야함
+        require(reserveA > 0 && reserveB > 0, 'UniswapV2Library: INSUFFICIENT_LIQUIDITY');
+
+        // ★ 토큰 가격에 영향을 주면 안되므로 기존 비율을 지킵니다
+        // ★ 𝒙 : 𝒚 = 𝑳𝒙 : 𝑳𝒚 → 𝑳𝒚 = (𝑳𝒙 × 𝒚) / 𝒙
+        amountB = amountA.mul(reserveB) / reserveA;
+    }
+
+    // ABBR .....
+}
+```
+
+<br />
+
+### `IUniswapV2Pair.mint`
+
+```solidity
+        liquidity = IUniswapV2Pair(pair).mint(to);
+```
+
+<br />
+
+[`IUniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/interfaces/IUniswapV2Pair.sol) 인터페이스의 `mint()` 메소드는 [ERERC-20 토큰 스탠다드](https://ethereum.org/ko/developers/docs/standards/tokens/erc-20/)를 따른 것으로, 토큰 페어에서 자체 토큰을 민팅하고 소각할 수 있게끔 설계되었다는 것을 알 수 있습니다. 각 토큰 페어에서 민팅되는 토큰들은 해당 토큰 페어에 대한 LP토큰으로 사용됩니다. `mint()` 메소드의 구현 내용은 [`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol)에서 확인할 수 있습니다.
+
+Uniswap V2부터는 사용자가 지불하는 수수료 0.3% 중에서 0.05%에 해당하는 보상을 Uniswap이 지정한 특정 주소로 전송되도록 했습니다. Protocol 수수료 명목으로, Uniswap 개발팀에게 보상이 주어지도록 말이죠. 나머지 0.25%는 기존과 같이 유동성 공급자에게 돌아갑니다. Protocol 수수료에 해당하는 만큼 LP토큰을 민팅하여 지정된 수령 주소로 보내는 방식입니다.
+
+> In Uniswap 2.0 traders pay a 0.30% fee to use the market. Most of that fee (0.25% of the trade) always goes to the liquidity providers. The remaining 0.05% can go either to the liquidity providers or to an address specified by the factory as a protocol fee, which pays Uniswap for their development effort. - [UNISWAP-V2 CONTRACT WALK-THROUGH](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/)
+
+<br />
+
+```solidity
+pragma solidity =0.5.16;
+
+import './interfaces/IUniswapV2Pair.sol';
+import './UniswapV2ERC20.sol';
+import './libraries/Math.sol';
+import './libraries/UQ112x112.sol';
+import './interfaces/IERC20.sol';
+import './interfaces/IUniswapV2Factory.sol';
+import './interfaces/IUniswapV2Callee.sol';
+
+contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
+
+    // ABBR .....
+
+    // ★ mint() 먼저 보세요
+    // if fee is on, mint liquidity equivalent to 1/6th of the growth in sqrt(k)
+    function _mintFee(uint112 _reserve0, uint112 _reserve1) private returns (bool feeOn) {
+        // ★ Protocol 수수료 수령 주소
+        address feeTo = IUniswapV2Factory(factory).feeTo();
+
+        // ★ Protocol 수수료 존재 여부
+        feeOn = feeTo != address(0);
+
+        uint _kLast = kLast; // gas savings ★ → memory 변수에 담아서 연산에 사용
+
+        if (feeOn) {
+            if (_kLast != 0) {
+                // ★★★ 1)
+                // ★ rootK = √(𝒙𝒚)
+                // ★ rootKLast = √𝒌
+                uint rootK = Math.sqrt(uint(_reserve0).mul(_reserve1));
+                uint rootKLast = Math.sqrt(_kLast);
+                
+                // ★ If there is new liquidity on which to collect a protocol fee
+                if (rootK > rootKLast) {
+                    // ★ 백서 p.5 참고 → https://uniswap.org/whitepaper.pdf
+                    uint numerator = totalSupply.mul(rootK.sub(rootKLast));
+                    uint denominator = rootK.mul(5).add(rootKLast);
+                    uint liquidity = numerator / denominator;
+
+                    // ★ Protocol 수수료 수령 주소로 토큰 민팅
+                    if (liquidity > 0) _mint(feeTo, liquidity);
+                }
+            }
+        } else if (_kLast != 0) {
+            kLast = 0;
+        }
+    }
+    
+    // this low-level function should be called from a contract which performs important safety checks
+    function mint(address to) external lock returns (uint liquidity) {
+        (uint112 _reserve0, uint112 _reserve1,) = getReserves(); // gas savings ★ → memory에 저장한 후 연산에 사용
+
+        // ★ 토큰 페어의 각 토큰 Balance (𝒙 + 𝑳𝒙), (𝒚 + 𝑳𝒚)
+        uint balance0 = IERC20(token0).balanceOf(address(this));
+        uint balance1 = IERC20(token1).balanceOf(address(this));
+
+        // ★ 아직 블록에 _reserve0, _reserve1 업데이트가 되지 않았으므로, 해당 값을 빼서 이번에 추가된 공급량 𝑳𝒙, 𝑳𝒚 가져옴
+        uint amount0 = balance0.sub(_reserve0);
+        uint amount1 = balance1.sub(_reserve1);
+
+        // ★ Protocol 수수료 존재시, 수령 주소로 토큰 민팅
+        bool feeOn = _mintFee(_reserve0, _reserve1);
+
+        uint _totalSupply = totalSupply; // gas savings, must be defined here since totalSupply can update in _mintFee
+
+        if (_totalSupply == 0) {
+            // ★★★ 2)
+            // ★ 최초 유동성 공급시, 기여하는 유동성 규모 = √(𝑳𝒙 × 𝑳𝒚) - 𝑳𝒎𝒊𝒏
+            // ★ ∵ 아직 두 토큰의 상대적 가치가 존재하지 않기 때문에, 두 토큰의 가치가 같다고 가정
+            liquidity = Math.sqrt(amount0.mul(amount1)).sub(MINIMUM_LIQUIDITY);
+
+            // ★★★ 3)
+            // ★ 최소 유동성 𝑳𝒎𝒊𝒏에 해당하는 만큼의 LP토큰을 주소0으로 민팅해서 영원히 Lock
+           _mint(address(0), MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
+        } else {
+            // ★★★ 4)
+            // ★ 다음 둘 중 더 적은 값을 기여도로 결정
+            // ★ (𝑳𝒙 × 𝑻𝒐𝒕𝒂𝒍) / 𝒙
+            // ★ (𝑳𝒚 × 𝑻𝒐𝒕𝒂𝒍) / 𝒚
+            liquidity = Math.min(amount0.mul(_totalSupply) / _reserve0, amount1.mul(_totalSupply) / _reserve1);
+        }
+
+        require(liquidity > 0, 'UniswapV2: INSUFFICIENT_LIQUIDITY_MINTED');
+
+        // ★ 기여하는 유동성 규모에 따라 LP토큰을 민팅해줌!
+        _mint(to, liquidity);
+
+        // ★ 토큰 페어 Reserve 업데이트
+        _update(balance0, balance1, _reserve0, _reserve1);
+
+        // ★ (𝒙 + 𝑳𝒙) × (𝒚 + 𝑳𝒚) = 𝒌𝒏𝒆𝒘
+        if (feeOn) kLast = uint(reserve0).mul(reserve1); // reserve0 and reserve1 are up-to-date
+
+        // ★ 이벤트로 알려주기
+        emit Mint(msg.sender, amount0, amount1);
+    }
+
+    // ABBR .....
+}
+```
+
+<br />
+
+#### `★★★ 1)`
+
+```solidity
+            // ★ rootK = √(𝒙𝒚)
+            // ★ rootKLast = √𝒌
+            uint rootK = Math.sqrt(uint(_reserve0).mul(_reserve1));
+            uint rootKLast = Math.sqrt(_kLast);
+            
+            // ★ If there is new liquidity on which to collect a protocol fee
+            if (rootK > rootKLast) {
+                // ★ 백서 p.5 참고 → https://uniswap.org/whitepaper.pdf
+                uint numerator = totalSupply.mul(rootK.sub(rootKLast));
+                uint denominator = rootK.mul(5).add(rootKLast);
+                uint liquidity = numerator / denominator;
+
+                // ★ Protocol 수수료 수령 주소로 토큰 민팅
+                if (liquidity > 0) _mint(feeTo, liquidity);
+            }
+```
+
+<br />
+
+> We know that between the time kLast was calculated and the present no liquidity was added or removed (because we run this calculation every time liquidity is added or removed, before it actually changes), so any change in reserve0 * reserve1 has to come from transaction fees (without them we'd keep reserve0 * reserve1 constant).
+
+> Calculate the protocol fees to collect, if any, and mint liquidity tokens accordingly. Because the parameters to _mintFee are the old reserve values, the fee is calculated accurately based only on pool changes due to fees. - [UNISWAP-V2 CONTRACT WALK-THROUGH](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/)
+
+<br />
+
+#### `★★★ 2)`
+
+```solidity
+            // ★ 최초 유동성 공급시, 기여하는 유동성 규모 = √(𝑳𝒙 × 𝑳𝒚) - 𝑳𝒎𝒊𝒏
+            // ★ ∵ 아직 두 토큰의 상대적 가치가 존재하지 않기 때문에, 공급된 두 토큰의 가치가 같다고 가정
+            liquidity = Math.sqrt(amount0.mul(amount1)).sub(MINIMUM_LIQUIDITY);
+```
+
+<br />
+
+위에서 공급된 두 토큰의 가치가 같다, `𝑳𝒙 × 𝑷𝒙 ≒ 𝑳𝒚 × 𝑷𝒚`가 성립한다고 가정할 수 있는 배경은 다음과 같습니다.
+
+> In the time of the first deposit we don't know the relative value of the two tokens, so we just multiply the amounts and take a square root, assuming that the deposit provides us with equal value in both tokens.
+
+> We can trust this because it is in the depositor's interest to provide equal value, to avoid losing value to arbitrage. Let's say that the value of the two tokens is identical, but our depositor deposited four times as many of Token1 as of Token0. A trader can use the fact the pair exchange thinks that Token0 is more valuable to extract value out of it.
+
+<img src="./img/v2-add-liq-ex1.png" width="900" />
+
+> As you can see, the trader earned an extra 8 tokens, which come from a reduction in the value of the pool, hurting the depositor that owns it. - [UNISWAP-V2 CONTRACT WALK-THROUGH](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/)
+
+<br />
+
+#### `★★★ 3)`
+
+```solidity
+            // ★ 최소 유동성 𝑳𝒎𝒊𝒏에 해당하는 만큼의 LP토큰을 주소0으로 민팅해서 영원히 Lock
+           _mint(address(0), MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
+```
+
+<br />
+
+> They can never to redeemed, which means the pool will never be emptied completely (this saves us from division by zero in some places). The value of MINIMUM_LIQUIDITY is a thousand, which considering most ERC-20 are subdivided into units of 10^-18'th of a token, as ETH is divided into wei, is 10^-15 to the value of a single token. Not a high cost. - [UNISWAP-V2 CONTRACT WALK-THROUGH](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/)
+
+<br />
+
+#### `★★★ 4)`
+
+```solidity
+            // ★ 다음 둘 중 더 적은 값을 기여도로 결정
+            // ★ (𝑳𝒙 × 𝑻𝒐𝒕𝒂𝒍) / 𝒙
+            // ★ (𝑳𝒚 × 𝑻𝒐𝒕𝒂𝒍) / 𝒚
+            liquidity = Math.min(amount0.mul(_totalSupply) / _reserve0, amount1.mul(_totalSupply) / _reserve1);
+```
+
+<br />
+
+> With every subsequent deposit we already know the exchange rate between the two assets, and we expect liquidity providers to provide equal value in both. If they don't, we give them liquidity tokens based on the lesser value they provided as a punishment.
+
+> Whether it is the initial deposit or a subsequent one, the number of liquidity tokens we provide is equal to the square root of the change in reserve0*reserve1 and the value of the liquidity token doesn't change (unless we get a deposit that doesn't have equal values of both types, in which case the "fine" gets distributed). - [UNISWAP-V2 CONTRACT WALK-THROUGH](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/)
 
 <br />
 
