@@ -454,7 +454,7 @@ Out 토큰의 경우 다음이 성립합니다: `(𝒚 - △𝒚) × 1000 - 0`
 
 <br />
 
-### `addLiquidity`
+### `UniswapV2Router02` (Periphery)
 
 ```solidity
 pragma solidity =0.6.6;
@@ -608,7 +608,7 @@ library UniswapV2Library {
 
 <br />
 
-### `IUniswapV2Pair.mint`
+### `IUniswapV2Pair` (Core)
 
 ```solidity
         liquidity = IUniswapV2Pair(pair).mint(to);
