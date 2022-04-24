@@ -16,13 +16,15 @@ Uniswap V2를 이루는 Contract들은 크게 Core와 Periphery Contract로 나�
 
 <br />
 
-Periphery는 Core와 상호작용하기 위한 Contract입니다. Uniswap의 Periphery는 사실상 하나의 Contract로 이루어져있는데, [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 그것입니다.
+Periphery는 Core와 상호작용하기 위한 Contract입니다. Uniswap의 Periphery는 사실상 하나의 Contract로 이루어져있는데, [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 그것이고요. 다음은 Core/Periphery Seperation에 대한 설명입니다.
 
-<br />
-
-DEX인만큼 [`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol) Contract의 `swap()` 메소드가 대표적입니다. 다만, 하나의 Feature에 수반되는 모든 로직들이 Core Contract에 담겨있지는 않고 최소한의 핵심 기능들만 쪼개서 각 메소드들이 수행하는 형태입니다.
-
-> These contracts are quite minimal, even brutalist. The simple rationale for this is that contracts with a smaller surface area are easier to reason about, less bug-prone, and more functionally elegant. Perhaps the biggest upside of this design is that many desired properties of the system can be asserted directly in the code, leaving little room for error. - [Uniswap Docs V2](https://docs.uniswap.org/protocol/V2/concepts/protocol-overview/smart-contracts)
+> The Uniswap V2 contracts introduce a separation between the core and periphery contracts, where the core contracts are responsible for supporting liquidity providers, providing time weighted price feeds and enforcing core accounting invariants. Features designed to support or protect traders are implemented with separate contracts in the periphery that call into the core.
+>
+> This separation has a few benefits:
+>
+> - Less code with direct access to pool tokens
+> - Reduced audit surface area for key invariants
+> - Increased amenability to the application of formal methods
 
 <br />
 
