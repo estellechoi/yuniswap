@@ -815,5 +815,6 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
 - [Uniswap Smart Contract Breakdown (Part 2)](https://ilamanov.medium.com/uniswap-smart-contract-breakdown-part-2-b9ea2fca65d1)
 - [Core / Periphery Seperation | Uniswap V2 Audit Report](https://dapp.org.uk/reports/uniswapv2.html#org38b30ec)
 - [External call in swap | Uniswap V2 Audit Report](https://dapp.org.uk/reports/uniswapv2.html#orgda20fa2)
+- [Utilizing the new Uniswap v2 in Your Smart Contract - Himanshu Kumar](https://blockchain.oodles.io/dev-blog/utilizing-the-new-uniswap-v2-in-your-smart-contract/)
 - [[Defi] Uniswap V2 Contract 코드 분석 1 - Factory](https://boohyunsik.tistory.com/7)
 - [I am having a difficulty of understanding interfaces in Solidity. What am I missing? | StackOverflow](https://stackoverflow.com/questions/64733976/i-am-having-a-difficulty-of-understanding-interfaces-in-solidity-what-am-i-miss)
