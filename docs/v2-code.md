@@ -2,11 +2,29 @@
 
 <br />
 
-4. Swap
-5. Add Liquidity
+1. Core & Periphery
+2. Swap
+3. Add Liquidity
 
 <br />
 
+## 1. Core & Periphery
+
+Uniswap V2를 이루는 Contract들은 크게 Core와 Periphery Contract로 나뉩니다. Core에 해당하는 Contract들은 말그대로 Uniswap의 코어 로직을 담고 있는 것들인데, ERC20([`UniswapV2ERC20`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2ERC20.sol))을 제외하면 Factory([`UniswapV2Factory`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Factory.sol))와 Pair([`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol)) 2 개의 Contract로 이루어집니다. Factory는 [싱글톤](https://www.techopedia.com/definition/15830/singleton) 패턴을 사용하는데, 생성되는 모든 토큰 페어가 Ethereum 상에서 단 하나의 Factory 주소와 연결되어야하기 때문입니다.
+
+> Its primary job is to create one and only one smart contract per unique token pair. It also contains logic to turn on the protocol charge. - [Uniswap Docs V2](https://docs.uniswap.org/protocol/V2/concepts/protocol-overview/smart-contracts)
+
+<br />
+
+Periphery는 Core와 상호작용하기 위한 Contract입니다. Uniswap의 Periphery는 사실상 하나의 Contract로 이루어져있는데, [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 그것입니다.
+
+<br />
+
+DEX인만큼 [`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol) Contract의 `swap()` 메소드가 대표적입니다. 다만, 하나의 Feature에 수반되는 모든 로직들이 Core Contract에 담겨있지는 않고 최소한의 핵심 기능들만 쪼개서 각 메소드들이 수행하는 형태입니다.
+
+> These contracts are quite minimal, even brutalist. The simple rationale for this is that contracts with a smaller surface area are easier to reason about, less bug-prone, and more functionally elegant. Perhaps the biggest upside of this design is that many desired properties of the system can be asserted directly in the code, leaving little room for error. - [Uniswap Docs V2](https://docs.uniswap.org/protocol/V2/concepts/protocol-overview/smart-contracts)
+
+<br />
 
 ## 4. Swap
 
@@ -788,3 +806,14 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
 > Whether it is the initial deposit or a subsequent one, the number of liquidity tokens we provide is equal to the square root of the change in reserve0*reserve1 and the value of the liquidity token doesn't change (unless we get a deposit that doesn't have equal values of both types, in which case the "fine" gets distributed). - [UNISWAP-V2 CONTRACT WALK-THROUGH](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/)
 
 <br />
+
+---
+
+### References
+
+- [Uniswap Smart Contract Breakdown - Nazar Ilamanov](https://betterprogramming.pub/uniswap-smart-contract-breakdown-ea20edf1a0ff)
+- [Uniswap Smart Contract Breakdown (Part 2)](https://ilamanov.medium.com/uniswap-smart-contract-breakdown-part-2-b9ea2fca65d1)
+- [Core / Periphery Seperation | Uniswap V2 Audit Report](https://dapp.org.uk/reports/uniswapv2.html#org38b30ec)
+- [External call in swap | Uniswap V2 Audit Report](https://dapp.org.uk/reports/uniswapv2.html#orgda20fa2)
+- [[Defi] Uniswap V2 Contract 코드 분석 1 - Factory](https://boohyunsik.tistory.com/7)
+- [I am having a difficulty of understanding interfaces in Solidity. What am I missing? | StackOverflow](https://stackoverflow.com/questions/64733976/i-am-having-a-difficulty-of-understanding-interfaces-in-solidity-what-am-i-miss)
