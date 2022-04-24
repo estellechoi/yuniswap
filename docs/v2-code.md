@@ -36,7 +36,7 @@ Uniswap V2의 스왑 로직을 담은 Core Contract는 [`UniswapV2Pair`](https:/
 
 <br />
 
-### `UniswapV2Router02`
+### `UniswapV2Router02` (Periphery)
 
 이 Periphery Contract에서는 `_swap()`이라는 `internal` 메소드를 통해 `UniswapV2Pair`의 `swap()` 메소드를 호출합니다. Contract를 살펴보면, `_swap()` 메소드는 몇 가지 `external` 함수들에서 호출되는데 아래의 코드 분석에서는 그 중 한 가지 메소드인 `swapExactTokensForTokens()` 메소드만 다루었습니다.
 
@@ -232,7 +232,7 @@ library UniswapV2Library {
 
 <br />
 
-### `UniswapV2Pair`
+### `UniswapV2Pair` (Core)
 
 드디어 [`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol) Contract를 봅니다.
 
