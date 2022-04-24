@@ -28,6 +28,32 @@ Periphery는 Core와 상호작용하기 위한 Contract입니다. Uniswap의 Per
 
 <br />
 
+Periphery Contract인 [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 배포될 때 다음과 같이 `immutable`한 Factory 주소가 할당되는데,
+
+```solidity
+contract UniswapV2Router02 is IUniswapV2Router02 {
+    address public immutable override factory;
+    address public immutable override WETH;
+
+    constructor(address _factory, address _WETH) public {
+        factory = _factory;
+        WETH = _WETH;
+    }
+}
+```
+
+<br />
+
+Factory Interface인 `IUniswapV2Factory`를 사용할 때 이 고정된 Factory 주소값이 필요합니다. 가령, `_addLiquidity` 함수 내에서 `IUniswapV2Factory` 인스턴스를 참조하여 `getPair()` 메소드를 호출할 때 다음과 같이 `factory`가 사용됩니다.
+
+```solidity
+if (IUniswapV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
+            IUniswapV2Factory(factory).createPair(tokenA, tokenB);
+}
+```
+
+<br />
+
 ## 4. Swap
 
 Uniswap V2의 스왑 로직을 담은 Core Contract는 [`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol)이고, 해당 Contract의 `swap()` 메소드를 보시면 됩니다. 이 `swap()` 메소드는 `external`이지만 외부에서 직접 호출시 작동하지 않고 [Periphery Contract](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/#UniswapV2Router02)를 통해서만 호출되도록 설계되어 있다는 것이 중요합니다. [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 해당 Periphery Contract이고요. 그러니까 외부에서 Uniswap Core Contract의 `swap()` 메소드를 호출하려면 `UniswapV2Router02` 컨트랙트를 통해야만 합니다. 이렇게 외부와의 Connector 역할을 하는 Contract를 Router라고도 부릅니다.
