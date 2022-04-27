@@ -3,20 +3,31 @@
 <br />
 
 1. Core & Periphery
-2. Swap
-3. Add Liquidity
+2. Pair Contract
+3. Factory Contract
+4. Router Contract
+5. Swap
+6. Add Liquidity
 
 <br />
 
 ## 1. Core & Periphery
 
-Uniswap V2를 이루는 Contract들은 크게 Core와 Periphery Contract로 나뉩니다. Core에 해당하는 Contract들은 말그대로 Uniswap의 코어 로직을 담고 있는 것들인데, ERC20([`UniswapV2ERC20`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2ERC20.sol))을 제외하면 Factory([`UniswapV2Factory`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Factory.sol))와 Pair([`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol)) 2 개의 Contract로 이루어집니다. Factory는 [싱글톤](https://www.techopedia.com/definition/15830/singleton) 패턴을 사용하는데, 생성되는 모든 토큰 페어가 Ethereum 상에서 단 하나의 Factory 주소와 연결되어야하기 때문입니다.
+### 1-1. Core/Periphery Seperation
 
-> Its primary job is to create one and only one smart contract per unique token pair. It also contains logic to turn on the protocol charge. - [Uniswap Docs V2](https://docs.uniswap.org/protocol/V2/concepts/protocol-overview/smart-contracts)
+Uniswap V2를 이루는 Contract는 크게 Core와 Periphery로 나뉩니다. Core Contract들은 말그대로 Uniswap의 코어 로직을 담고 있는 것들이고요, Periphery는 Core와 상호작용하는 Contract로 Uniswap의 API라고 볼 수 있습니다. Periphery는 외부의 다른 Contract나 Dapp의 클라이언트에서 직접 호출할 수 있습니다. Core Contract의 메소드들이 `external` 이기 때문에 역시나 외부에서 직접 호출하는 것이 가능하지만, Core의 메소드를 직접 사용하는 것은 다소 위험합니다. Core의 메소드들은 Uniswap을 지키기 위한 메커니즘만 포함하고 있기 때문에 사용자를 보호하는 장치는 포함되어있지 않습니다. 사용자의 실수로 토큰을 잃을 수도 있다는 말이죠! 사용자들을 위한 [Sanity Check](https://en.wikipedia.org/wiki/Sanity_check)은 Periphery를 통해 제공합니다.
+
+> The periphery contracts are the API (application program interface) for Uniswap. They are available for external calls, either from other contracts or decentralized applications. You could call the core contracts directly, but that's more complicated and you might lose value if you make a mistake. The core contracts only contain tests to make sure they aren't cheated, not sanity checks for anybody else. Those are in the periphery so they can be updated as needed. - [UNISWAP-V2 CONTRACT WALK-THROUGH | Ethereum Org](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/#periphery-contracts)
 
 <br />
 
-Periphery는 Core와 상호작용하기 위한 Contract입니다. Uniswap의 Periphery는 사실상 하나의 Contract로 이루어져있는데, [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 그것이고요. 다음은 Core/Periphery Seperation에 대한 설명입니다.
+Uniswap V2가 Core와 Periphery로 나뉘어 디자인된 이유는 토큰 페어에 직접적으로 영향을 미치는 로직들을 그렇지 않은 것들과 나누어, Core를 더 간단하고, 안전하고, Audit하기 쉽도록 유지하기 위함입니다.
+
+> Uniswap v2 is divided into two components, a core and a periphery. This division allows the core contracts, which hold the assets and therefore have to be secure, to be simpler and easier to audit. All the extra functionality required by traders can then be provided by periphery contracts. - [UNISWAP-V2 CONTRACT WALK-THROUGH | Ethereum Org](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/#contract-types)
+
+<br />
+
+다음은 Core/Periphery Seperation에 대한 [Uniswap V2 Audit Report](https://dapp.org.uk/reports/uniswapv2.html)의 설명입니다.
 
 > The Uniswap V2 contracts introduce a separation between the core and periphery contracts, where the core contracts are responsible for supporting liquidity providers, providing time weighted price feeds and enforcing core accounting invariants. Features designed to support or protect traders are implemented with separate contracts in the periphery that call into the core.
 >
@@ -28,7 +39,25 @@ Periphery는 Core와 상호작용하기 위한 Contract입니다. Uniswap의 Per
 
 <br />
 
-Periphery Contract인 [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 배포될 때 다음과 같이 `immutable`한 Factory 주소가 할당되는데,
+### 1-2. Core Contracts
+
+Uniswap의 Core는 토큰 페어에 직접 영향을 주는 Contract로, 유동성을 홀딩하는 역할을 하기 때문에 Uniswap을 향한 Cheat 시도를 검증하는 메커니즘을 포함하는 Contract입니다. ERC20([`UniswapV2ERC20`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2ERC20.sol))을 제외하면 사실상 Pair([`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol))와 Factory([`UniswapV2Factory`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Factory.sol)) 2 개의 Contract로 이루어집니다.
+
+<br />
+
+Factory는 [싱글톤](https://www.techopedia.com/definition/15830/singleton) 패턴을 사용하는데, 생성되는 모든 토큰 페어가 Ethereum 상에서 단 하나의 Factory 주소와 연결되어야하기 때문입니다. 자세한 내용은 별도로 섹션을 나누어 정리하려고 합니다.
+
+> Its primary job is to create one and only one smart contract per unique token pair. It also contains logic to turn on the protocol charge. - [Uniswap Docs V2](https://docs.uniswap.org/protocol/V2/concepts/protocol-overview/smart-contracts)
+
+<br />
+
+### 1-3. Periphery Contracts
+
+Periphery는 Core와 상호작용하기 위한 Contract로, Uniswap에서 제공하는 API라고 위에서 언급했었죠. Uniswap의 Periphery는 사실상 하나의 Contract로 이루어져있는데, [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 그것입니다. `UniswapV2Router02`가 배포될 때 다음과 같이 Factory 주소와 WETH 주소가 State 변수에 할당되는데, 변하지 않는 단 하나의 Factory와 연결해야하므로 [`immutable`](https://docs.soliditylang.org/en/v0.8.3/contracts.html#constant-and-immutable-state-variables) 변수가 사용됩니다.
+
+> The router needs to know what factory to use, and for transactions that require WETH what WETH contract to use. These values are immutable, meaning they can only be set in the constructor. This gives users the confidence that nobody would be able to change them to point to less honest contracts. - [UNISWAP-V2 CONTRACT WALK-THROUGH | Ethereum Org](https://ethereum.org/ko/developers/tutorials/uniswap-v2-annotated-code/#UniswapV2Router02)
+
+<br />
 
 ```solidity
 contract UniswapV2Router02 is IUniswapV2Router02 {
@@ -44,7 +73,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
 
 <br />
 
-Factory Interface인 `IUniswapV2Factory`를 사용할 때 이 고정된 Factory 주소값이 필요합니다. 가령, `_addLiquidity` 함수 내에서 `IUniswapV2Factory` 인스턴스를 참조하여 `getPair()` 메소드를 호출할 때 다음과 같이 `factory`가 사용됩니다.
+Factory Interface인 `IUniswapV2Factory`를 사용할 때 이 고정된 Factory 주소값이 필요합니다. 가령, `_addLiquidity` 함수 내에서 `IUniswapV2Factory` 인스턴스를 생성하여 `getPair()` 메소드를 호출할 때 다음과 같이 `factory` 변수가 담고있는 Factory 주소값이 사용됩니다.
 
 ```solidity
 if (IUniswapV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
@@ -54,7 +83,20 @@ if (IUniswapV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
 
 <br />
 
-## 4. Swap
+## 2. Pair Contract
+
+
+<br />
+
+## 3. Factory Contract
+
+<br />
+
+## 4. Router Contract
+
+<br />
+
+## 5. Swap
 
 Uniswap V2의 스왑 로직을 담은 Core Contract는 [`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol)이고, 해당 Contract의 `swap()` 메소드를 보시면 됩니다. 이 `swap()` 메소드는 `external`이지만 외부에서 직접 호출시 작동하지 않고 [Periphery Contract](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/#UniswapV2Router02)를 통해서만 호출되도록 설계되어 있다는 것이 중요합니다. [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)가 해당 Periphery Contract이고요. 그러니까 외부에서 Uniswap Core Contract의 `swap()` 메소드를 호출하려면 `UniswapV2Router02` 컨트랙트를 통해야만 합니다. 이렇게 외부와의 Connector 역할을 하는 Contract를 Router라고도 부릅니다.
 
@@ -474,7 +516,7 @@ Out 토큰의 경우 다음이 성립합니다: `(𝒚 - △𝒚) × 1000 - 0`
 
 <br />
 
-## 5. Add Liquidity
+## 6. Add Liquidity
 
 이번에는 유동성 추가 로직을 정리하려고 합니다. 유동성이 추가되면 CPMM 모델의 상수 `𝒌` 값이 변한다는 것을 기억하시고요. 스왑과 마찬가지로 외부에서 유동성 추가 함수를 호출하려면 Periphery Contract인 [`UniswapV2Router02`](https://github.com/Uniswap/v2-periphery/blob/master/contracts/UniswapV2Router02.sol)를 통합니다.
 
