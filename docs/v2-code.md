@@ -73,7 +73,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
 
 <br />
 
-Factory Interface인 `IUniswapV2Factory`를 사용할 때 이 고정된 Factory 주소값이 필요합니다. 가령, `_addLiquidity` 함수 내에서 `IUniswapV2Factory` 인스턴스를 생성하여 `getPair()` 메소드를 호출할 때 다음과 같이 `factory` 변수가 담고있는 Factory 주소값이 사용됩니다.
+Factory Interface인 `IUniswapV2Factory`를 사용할 때 이 고정된 Factory 주소값이 필요합니다. 가령, [`_addLiquidity()`](https://github.com/Uniswap/v2-periphery/blob/2efa12e0f2d808d9b49737927f0e416fafa5af68/contracts/UniswapV2Router02.sol#L33) 메소드 내에서 `IUniswapV2Factory` 인스턴스를 생성하여 `getPair()` 메소드를 호출할 때 다음과 같이 `factory` 변수가 담고있는 Factory 주소값이 사용됩니다.
 
 ```solidity
 if (IUniswapV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
@@ -84,6 +84,46 @@ if (IUniswapV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
 <br />
 
 ## 2. Pair Contract
+
+[`UniswapV2Pair`](https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol)는 실제로 토큰 페어의 유동성 풀을 구현하는 Contract입니다. Contract 상단을 보면 `IUniswapV2Pair`, `IUniswapV2Factory`, `IUniswapV2Callee`, `IERC20` 4개 Interface를 Import하는데, `IUniswapV2Pair`는 직접 구현하기 위함이고 나머지는 해당 Interface를 구현하는 Contract들을 호출하기 위함입니다.
+
+```solidity
+import './interfaces/IUniswapV2Pair.sol';
+import './UniswapV2ERC20.sol';
+import './libraries/Math.sol';
+import './libraries/UQ112x112.sol';
+import './interfaces/IERC20.sol';
+import './interfaces/IUniswapV2Factory.sol';
+import './interfaces/IUniswapV2Callee.sol';
+```
+
+<br />
+
+Pair Contract는 `IUniswapV2Pair`를 구현하는 동시에 `UniswapV2ERC20`을 상속하는데 이는 LP 토큰 민팅과 소각에 필요하기 때문입니다.
+
+```solidity
+contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
+    // ..
+}
+```
+
+<br />
+
+Contract 첫 줄에 Solidity에서 수 계산시 Overflow/Underflow를 막기 위한 [`SafeMath`]() 라이브러리 사용이 선언되어있는 것을 확인할 수 있습니다. 그 다음 [`UQ112x112`](https://ethereum.org/en/developers/tutorials/uniswap-v2-annotated-code/#FixedPoint) 라이브러리 사용이 선언되어있는데, EVM에서 부동소수점을 지원하지 않기 때문에 Uniswap 팀에서 사용하는 라이브러리입니다.
+
+```solidity
+    using SafeMath  for uint;
+    using UQ112x112 for uint224;
+
+    uint public constant MINIMUM_LIQUIDITY = 10**3;
+    bytes4 private constant SELECTOR = bytes4(keccak256(bytes('transfer(address,uint256)')));
+```
+
+<br />
+
+
+
+
 
 
 <br />
