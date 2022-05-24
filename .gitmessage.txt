@@ -1,0 +1,20 @@
+################
+# type : title
+# title should be 50 char long
+
+################
+# description
+
+################
+# mention linked issue no. or use Jira Smart Commit syntax to get linked to Jira ticket
+# ex) close #7
+
+################
+# feat : new features added
+# fix : but fixed
+# docs : documentation
+# test : testing codes added or modified
+# refact : refactored
+# style : styling codes added, not affecting what this project does
+# chore : build or package related modifications done
+################
