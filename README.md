@@ -46,6 +46,15 @@ PRIVATE_KEY=0xabc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1
 
 <br />
 
+## 4. Chores you may need
+
+Setup commit msg template file
+
+```zsh
+git config commit.template .gitmessage.txt
+```
+
+<br />
 
 ---
 
