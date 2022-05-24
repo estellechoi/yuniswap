@@ -1,13 +1,13 @@
 ################
-# type : title
 # title should be 50 char long
+type : title
 
 ################
-# description
+describe
 
 ################
-# mention linked issue no. or use Jira Smart Commit syntax to get linked to Jira ticket
 # ex) close #7
+# mention linked issue no. or use Jira Smart Commit syntax to get linked to Jira ticket
 
 ################
 # feat : new features added
