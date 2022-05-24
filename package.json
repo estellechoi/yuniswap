@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
+  "scripts": {
+    "lint": "eslint",
+    "deploy": "yarn lint && npx hardhat run scripts/deploy.ts",
+    "deploy:local": "npx hardhat node && npx hardhat run --network localhost scripts/deploy.ts"
+  },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.0",
     "@nomiclabs/hardhat-etherscan": "^3.0.0",
